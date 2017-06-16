@@ -23,28 +23,32 @@ suspend fun fetch(url: String): String = suspendCoroutine { cont ->
     }
 }
 
-suspend fun pages() = publish<Pair<String, Int>>(CommonPool) {
+data class Resource(val url: String, val length: Int)
+
+suspend fun pages() = publish<Resource>(CommonPool) {
     for (url in urls) {
         try {
-            send(Pair(url, fetch(url).length))
+            send(Resource(url, fetch(url).length))
         } catch (_: Throwable) {
-            send(Pair(url, -1))
+            send(Resource(url, -1))
         }
     }
 }
 
 fun main(args: Array<String>) = runBlocking {
-    launch(CommonPool) {
-        pages().consumeEach { (url, length) ->
-            println("$url ($length)")
+    val job = launch(CommonPool) {
+        pages().consumeEach {
+            println("${it.url} (${it.length})")
         }
     }
 
     Flowable
         .fromPublisher(pages())
-        .filter { (_, len) -> len < 50_000 }
-        .map { it.first }
-        .consumeEach { println(it) }
+        .filter { it.length < 50_000 }
+        .map { it.url }
+        .consumeEach { println("$it is less than 50K") }
+
+    job.join()
 }
 
 
